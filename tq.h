@@ -1,0 +1,413 @@
+/*****************************************************************************\
+ **                                                                         **
+ **  FILE:     tq.h                                                         **
+ **  AUTHORS:  Alexios (originally: Ben Fowler)                             **
+ **  LEGALESE:                                                              **
+ **                                                                         **
+ **  This program is free software; you  can redistribute it and/or modify  **
+ **  it under the terms of the GNU  General Public License as published by  **
+ **  the Free Software Foundation; either version 2 of the License, or (at  **
+ **  your option) any later version.                                        **
+ **                                                                         **
+ **  This program is distributed  in the hope  that it will be useful, but  **
+ **  WITHOUT    ANY WARRANTY;   without  even  the    implied warranty  of  **
+ **  MERCHANTABILITY or  FITNESS FOR  A PARTICULAR  PURPOSE.   See the GNU  **
+ **  General Public License for more details.                               **
+ **                                                                         **
+ **  You  should have received a copy   of the GNU  General Public License  **
+ **  along with    this program;  if   not, write  to  the   Free Software  **
+ **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.              **
+\*****************************************************************************/
+
+
+/*
+ * $Id: tq.h,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $
+ *
+ * $Log: tq.h,v $
+ * Revision 0.1  1999/05/27 19:43:16  alexios
+ * Initial revision, as adapted from Duh Draw.
+ *
+ *
+ */
+
+
+#ifndef RCS_VER 
+#define RCS_VER "$Id: tq.h,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $"
+#endif
+
+
+/* Original copyright^H^H^H^H^Hleft notice follows: */
+
+/*****************************************************************************
+ *                                  Duh DRAW 
+ *                                  for Linux
+ *                          (c) Copyleft February 1996
+ *                                 Ben Fowler
+ *
+ ****************************************************************************/
+
+
+#ifndef __TQ_H
+#define __TQ_H
+
+
+#include <strings.h>
+#include <stdio.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <malloc.h>
+#include <time.h>
+#include <curses.h> 
+
+
+#define MAXLINES 1000
+
+#define slowscroll 1
+
+#define DEFAULT_ATTR 0x07
+#define DEFAULT_CHAR 0x20
+
+#ifdef CTRL
+#undef CTRL
+#endif
+#define CTRL(x) ((x)-'@')
+
+#define META KEY_MAX
+
+#define rows LINES
+#define cols COLS
+
+#define min(a,b) ((a)<(b)?(a):(b))
+#define max(a,b) ((a)>(b)?(a):(b))
+
+extern int x;
+extern int y;
+extern int starty;
+
+extern unsigned int attr;
+extern char *statusline;
+extern char filename[256];
+
+/* The ANSI edit buffer with more attributes (for BBS usage) */
+
+typedef struct cell_t {
+  unsigned int extattrs;	/* Layout, variables, etc */
+  unsigned int attrs;		/* Normal attributes */
+} cell_t;
+
+extern cell_t        *editbuffer;
+extern cell_t        *blockbuffer;
+extern int            buffersize;
+extern int            originalwidth;
+
+extern int            attrpaint;
+extern int            block;
+extern int            linedraw;
+extern int            insert;
+extern int            chrset;
+extern int            changed;
+extern int            olddir;
+extern int            newdir;
+extern int            lastchar;
+extern int            bx1,bx2,by1,by2;
+extern int            lx1,lx2,ly1,ly2;
+extern int            dragtype;
+extern int            numlines;
+extern int            numcolumns;
+extern int            cancel;
+
+
+extern int graphchars[15][11];
+extern int modframe[16][11];
+
+
+
+
+#if 0
+
+
+extern char      workname  [35];
+extern char      author    [20];
+extern char      group     [20]; /* sauce info */
+extern char      pathname [255];
+extern long int  total;
+extern void *    _sort_func;
+extern int       dircount;
+extern int       curlo;
+extern int       diry;
+
+
+struct mydirstruct {
+  char      name  [255];
+  long int size;
+  char      sauce  [50];
+};
+
+
+extern struct mydirstruct tirp[200];
+
+
+struct sauceo {
+  char sig[7]; /* SAUCE00 */
+  char workname[35];
+  char author[20];
+  char group[20];
+  char date[8];
+  int unknown;
+  int bla2;
+  int bla3;
+};
+
+extern struct sauceo sauceinfo;
+
+
+/* these defined as codes not usualy produced */
+
+#define CRSUP    KEY_UP
+#define CRSDOWN  KEY_DOWN
+#define CRSLEFT  KEY_LEFT
+#define CRSRIGHT KEY_RIGHT
+#define HOME     KEY_HOME
+#define END      KEY_END
+
+/* Try a few alternative defs of the Insert/Delete keys */
+
+#ifdef KEY_INSERT
+#define INSERT   KEY_INSERT
+#define DELETE   KEY_DELETE
+#else
+#define INSERT   KEY_IL
+#define DELETE   KEY_DL
+#endif
+
+/* Try a few alternative defs of the Next/PgDn key */
+#ifdef KEY_NEXT
+#define PAGEDOWN KEY_NEXT
+#ifdef KEY_PRIOR
+#define PAGEUP   KEY_PRIOR
+#else
+#define PAGEUP   KEY_PREVIOUS
+#endif /* KEY_PRIOR */
+#else
+#ifdef KEY_NPAGE
+#define PAGEDOWN KEY_NPAGE
+#define PAGEUP   KEY_PPAGE
+#else
+#ifdef KEY_PGDOWN
+#define PAGEDOWN KEY_PGDOWN
+#define PAGEUP   KEY_PGUP
+#else
+#ifdef KEY_PGDN
+#define PAGEDN KEY_PGDN
+#define PAGEUP KEY_PGUP
+#else
+#error "Unable to find the KEY_ name of the Next/Prior/PgUp/PgDn keys!"
+#endif /* KEY_PGDN */
+#endif /* KEY_PGDOWN */
+#endif /* KEY_NPAGE */
+#endif /* KEY_NEXT */
+
+
+extern int x,y;			/* current x and y of cursor on screen */
+extern int ay;			/* actual y of cursor */
+
+extern int bux,buy,blx,bly;		/* block upper x,y lower x,y */
+extern int insert;			/* 0 = overtype , 1 if insert */
+extern int block;			/* 0 if normal , 1 if blockmode */
+extern int animation;		/* 0 if normal , 1 if animation mode */
+extern int linedraw;			/* linedraw = 1, normal = 0 */
+extern int fore;			/* foreground color */
+extern int back;			/* current backround color */
+extern int text;			/* 0 if text , 1 if attrib  */
+extern int blink;			/* foreground is blinking? */
+extern int set;			/* current highascii character set */
+extern int page;			/* current page layer */
+extern int rows;
+extern int cols;
+extern int pos;
+extern int splos;
+extern int alastline;			/* actual lastline of ansi */
+extern FILE *fileout;
+extern int spacecount;
+extern int charcount;
+extern int savetype;
+extern int changed;
+extern int *theblock;
+extern int lastchar;
+
+/* The ANSI edit buffer with more attributes (for BBS usage) */
+
+struct cell_t {
+  unsigned int extattrs;	/* Layout, variables, etc */
+  unsigned int attrs;		/* Normal attributes */
+};
+
+extern struct cell_t *editbuffer;
+extern int            buffersize;
+extern int            originalwidth;
+
+extern char  filename[256];	/* name of file being edited */
+extern char  input[256];	/* global buffer for user input */
+extern char  buf[256];		/* a scotsman on a horse */
+
+extern int	def_color       ;   /* white */
+extern int	ulcolor		;   /* bold white */
+extern int	halfcolor       ;   /* grey */
+extern int	top		;
+extern int	bottom		;
+extern int attr;
+extern int maxread ;
+extern int	intensity;
+extern int	underline;
+extern int	reverse;
+extern int	color; /* gray on black */
+extern int	saved_x;
+extern int	saved_y;
+extern int	s_intensity;
+extern int	s_underline;
+extern int	s_blink;
+extern int	s_reverse;
+extern int	s_color;
+extern int ishome;
+extern int lattr;
+extern int lastline;
+
+extern clock_t ticks;   /* ticks/CLK_TCK = seconds we have been running */
+extern time_t timer;    /* seconds elapsed since Jan 1st 1970 */
+extern struct tm *amtime;
+
+
+extern int color_table[];
+
+extern int vc_state;
+
+extern char *colors[];
+
+
+extern int highascii[15][11];
+
+
+#endif
+
+
+
+/* init.c */
+
+void init(int argc, char **argv);
+
+
+
+/* editloop.c */
+
+void fixvars();
+void int_handler(int signum);
+void editloop();
+
+
+/* funcs.c */
+
+int  mysort(const void *d1,const void *d2);
+void colorsel();
+int  yesno(char *prompt, int def);
+void find_area();
+void show_ioerror(char *op);
+
+
+
+/* curses.c */
+
+void cgaattr(unsigned int cga_attr);
+
+void redraw();
+
+
+/* getchar.c */
+
+int mygetchar();
+int mygetline(char *buffer,int maxlen);
+
+
+/* editing.c */
+
+void clr();
+void erasedrawing();
+void backspace();
+void deletechar();
+void newline();
+void dolinedraw();
+void doattr();
+void dohelp();
+void dochar(int c);
+void insertline();
+void deleteline();
+void insertcolumn();
+void deletecolumn();
+
+
+
+/* display.c */
+
+void dumpline(int line);
+void dumpscreen();
+void status();
+void ccolor();
+void cgoto();
+void cursor_off();
+void cursor_on();
+void show_bin(unsigned short int *image);
+
+
+
+/* movement */
+
+void goleft();
+void goright();
+void goup();
+void godown();
+void pageup();
+void pagedown();
+void scrollup(int bylines);
+void scrolldown(int bylines);
+
+
+/* file.c */
+
+void readfile();
+void loadfile(int blockload);
+void savefile(int blocksave);
+
+
+/* vt102.c */
+
+void load_and_interpret(int blockmode);
+
+
+
+/* block.c */
+
+void doblock();
+void stampblock();
+void leaveblock();
+void abortblock();
+void eraseblock();
+
+
+/* file_ansi.c */
+
+void ansi_save(int blockmode);
+void ansi_load(int blockmode);
+
+
+/* file_ascii.c */
+
+void ascii_save(int blockmode);
+void ascii_load(int blockmode);
+
+
+/* file_bin.c */
+
+void bin_save(int blockmode);
+void bin_load(int blockmode);
+
+
+#endif /* __DUHDRAW_H */

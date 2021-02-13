@@ -1,0 +1,323 @@
+head	0.1;
+access;
+symbols;
+locks
+	bbs:0.1;
+comment	@ * @;
+
+
+0.1
+date	99.05.27.19.43.16;	author alexios;	state Exp;
+branches;
+next	;
+
+
+desc
+@Miscellaneous functions.
+@
+
+
+0.1
+log
+@Initial revision, as adapted from Duh Draw.
+@
+text
+@/*****************************************************************************\
+ **                                                                         **
+ **  FILE:     funcs.c                                                      **
+ **  AUTHORS:  Alexios (originally: Ben Fowler)                             **
+ **  LEGALESE:                                                              **
+ **                                                                         **
+ **  This program is free software; you  can redistribute it and/or modify  **
+ **  it under the terms of the GNU  General Public License as published by  **
+ **  the Free Software Foundation; either version 2 of the License, or (at  **
+ **  your option) any later version.                                        **
+ **                                                                         **
+ **  This program is distributed  in the hope  that it will be useful, but  **
+ **  WITHOUT    ANY WARRANTY;   without  even  the    implied warranty  of  **
+ **  MERCHANTABILITY or  FITNESS FOR  A PARTICULAR  PURPOSE.   See the GNU  **
+ **  General Public License for more details.                               **
+ **                                                                         **
+ **  You  should have received a copy   of the GNU  General Public License  **
+ **  along with    this program;  if   not, write  to  the   Free Software  **
+ **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.              **
+\*****************************************************************************/
+
+
+/*
+ * $Id$
+ *
+ * $Log$
+ *
+ */
+
+
+#ifndef RCS_VER 
+#define RCS_VER "$Id$"
+#endif
+
+
+#include <errno.h>
+#include <string.h>
+
+#include "tq.h"
+#include "image_help.h"
+
+
+void
+dohelp()
+{
+  show_bin(screen_help);
+  mygetchar();
+  dumpscreen();
+}
+
+
+void
+colorsel()
+{
+  int i, done=0;
+  int fg=attr&0xf;
+  int bg=(attr&0xf0)>>4;
+  int tmpattr=attr;;
+  
+  tmpattr&=(A_STANDOUT+A_UNDERLINE+A_REVERSE+A_BLINK+A_DIM+A_BOLD+A_INVIS);
+
+  clear();
+
+  cgaattr(0x70);
+  printw(" Color Selection ");
+  clrtoeol();
+  
+  cgaattr(0x0f);
+  mvprintw(2,0,"Foreground:  ");
+  mvprintw(4,0,"Foreground:  ");
+  /*mvprintw(6,0,"Attributes:");*/
+  mvprintw(16,0,"Sample:");
+  cgaattr(0x7);
+#if 0
+  mvprintw( 6,13,"[1] Standout: ");
+  mvprintw( 7,13,"[2] Underline: ");
+  mvprintw( 8,13,"[3] Reverse: ");
+  mvprintw( 9,13,"[4] Blink: ");
+  mvprintw(10,13,"[5] Dim: ");
+  mvprintw(11,13,"[6] Bold: ");
+  mvprintw(12,13,"[7] Invisible: ");
+#endif
+
+  move(20,0);
+  cgaattr(0x07);
+#if 0
+  printw(
+	 "Use the arrow keys to change foreground and background colours. The indicated\n"\
+	 "number keys toggle display attributes. Not all attributes are available on all\n"\
+	 "terminals. Enter or Escape exit color selection.");
+#endif
+  printw(
+	 "Use the arrow keys to change foreground and background colours. \n"\
+	 "Enter or Escape exit color selection.");
+
+  while(!done){
+    int c;
+
+    cgaattr(0xf);
+    move(2,13);
+    for(i=0;i<16;i++){
+      addch(i==fg?'[':' ');
+      cgaattr(i==0?0x70:i);
+      printw("%02d",i);
+      cgaattr(0x0f);
+      addch(i==fg?']':' ');
+    }
+
+    move(4,13);
+    for(i=0;i<16;i++){
+      addch(i==bg?'[':' ');
+      cgaattr((i<<4)|0xf);
+      printw("%02d",i);
+      cgaattr(0x0f);
+      addch(i==bg?']':' ');
+    }
+
+#if 0
+    mvprintw(6, 28,tmpattr&A_STANDOUT?"ON ":"off");
+    mvprintw(7, 28,tmpattr&A_UNDERLINE?"ON ":"off");
+    mvprintw(8, 28,tmpattr&A_REVERSE?"ON ":"off");
+    mvprintw(9, 28,tmpattr&A_BLINK?"ON ":"off");
+    mvprintw(10,28,tmpattr&A_DIM?"ON ":"off");
+    mvprintw(11,28,tmpattr&A_BOLD?"ON ":"off");
+    mvprintw(12,28,tmpattr&A_INVIS?"ON ":"off");
+
+    attrset(tmpattr);
+    attron(COLOR_PAIR((bg*8+fg)));
+#endif
+    cgaattr((bg<<4)+fg);
+
+    mvprintw(16,14,"The quick brown fox jumps over the lazy dog.");
+    cgaattr(0x0f);
+    
+    refresh();
+    switch(c=mygetchar()){
+    case 13:
+    case 10:
+    case KEY_ENTER:
+      done=1;
+      attr=fg+(bg<<4);
+      break;
+
+    case KEY_LEFT:
+    case CTRL('B'):
+      if(--fg<0)fg=15;
+      if(fg&0x8) tmpattr|=A_BOLD; else tmpattr&=~A_BOLD;
+      if(fg==8 && bg==0)tmpattr|=A_DIM; else tmpattr&=~A_DIM;
+      break;
+      
+    case KEY_RIGHT:
+    case CTRL('F'):
+      fg=(fg+1)%16;
+      if(fg&0x8) tmpattr|=A_BOLD; else tmpattr&=~A_BOLD;
+      if(fg==8 && bg==0)tmpattr|=A_DIM; else tmpattr&=~A_DIM;
+      break;
+
+    case KEY_UP:
+    case CTRL('P'):
+      if(--bg<0)bg=15;
+      if(bg&0x8) tmpattr|=A_BLINK; else tmpattr&=~A_BLINK;
+      if(fg==8 && bg==0)tmpattr|=A_DIM; else tmpattr&=~A_DIM;
+      break;
+      
+    case KEY_DOWN:
+    case CTRL('N'):
+      bg=(bg+1)%16;
+      if(bg&0x8) tmpattr|=A_BLINK; else tmpattr&=~A_BLINK;
+      if(fg==8 && bg==0)tmpattr|=A_DIM; else tmpattr&=~A_DIM;
+      break;
+
+#if 0      
+    case '1':
+      tmpattr^=A_STANDOUT;
+      break;
+
+    case '2':
+      tmpattr^=A_UNDERLINE;
+      break;
+
+    case '3':
+      tmpattr^=A_REVERSE;
+      break;
+
+    case '4':
+      tmpattr^=A_BLINK;
+      if(tmpattr&A_BLINK)bg|=8; else bg&=~8;
+      break;
+
+    case '5':
+      tmpattr^=A_DIM;
+      break;
+
+    case '6':
+      tmpattr^=A_BOLD;
+      if(tmpattr&A_BOLD)fg|=8; else fg&=~8;
+      break;
+
+    case '7':
+      tmpattr^=A_INVIS;
+      break;
+#endif
+    }
+  }
+
+  clearok(stdscr,TRUE);
+  dumpscreen();
+  status();
+}
+
+
+
+int
+yesno(char *s, int def)
+{
+  if(def==0)sprintf(statusline,"%s [Y]es / [N]o  ([Enter]=no)  ",s);
+  else if(def>0)sprintf(statusline,"%s [Y]es / [N]o  ([Enter]=yes)  ",s);
+  else sprintf(statusline,"%s [Y]es / [N]o  ",s);
+  
+  status();
+  for(;;){
+    switch(mygetchar()){
+    case 'y':
+    case 'Y':
+      statusline[0]=0;
+      status();
+      return 1;
+
+    case 'n':
+    case 'N':
+      statusline[0]=0;
+      status();
+      return 0;
+      
+    case 10:
+    case 13:
+    case KEY_ENTER:
+      if(def>=0){
+	statusline[0]=0;
+	status();
+	return def!=0;
+      }
+      
+    default:
+      beep();
+    }
+  }
+}
+
+
+void
+find_area()
+{
+  register int done,i,j,pos,defval=(DEFAULT_ATTR<<8)|DEFAULT_CHAR;
+
+  /* Find out how many columns there are */
+  
+  for(done=0,i=originalwidth-1;done==0 && i>=0;i--){
+    pos=i;
+    for(j=0;j<MAXLINES;j++){
+      if(editbuffer[pos].attrs && editbuffer[pos].attrs!=defval){
+	numcolumns=i+1;
+	done=1;
+	break;
+      }
+      pos+=originalwidth;
+    }
+  }
+
+  if(i<0){
+    numcolumns=0;		/* Picture is empty */
+    numlines=0;
+    return;
+  }
+
+
+  /* Find out how many lines there are */
+
+  pos=MAXLINES*originalwidth-1;	/* Bottom right cell */
+  for(done=0,i=MAXLINES-1;i>=0;i--){
+    for(j=originalwidth-1;j>=0;j--,pos--){
+      if(editbuffer[pos].attrs && editbuffer[pos].attrs!=defval){
+	numlines=i+1;		/* Guaranteed to reach this point, */
+	return;			/* because of column-counting code */
+      }
+    }
+  }
+}
+
+
+void show_ioerror(char *op)
+{
+  int i=errno;
+  beep();
+  sprintf(statusline,"%s failed ({%s}), press any key.",op,strerror(i));
+  status();
+  mygetchar();
+}
+@

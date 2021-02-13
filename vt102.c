@@ -1,0 +1,541 @@
+/*****************************************************************************\
+ **                                                                         **
+ **  FILE:     vt102.c                                                      **
+ **  AUTHORS:  Alexios (originally: Ben Fowler)                             **
+ **  LEGALESE:                                                              **
+ **                                                                         **
+ **  This program is free software; you  can redistribute it and/or modify  **
+ **  it under the terms of the GNU  General Public License as published by  **
+ **  the Free Software Foundation; either version 2 of the License, or (at  **
+ **  your option) any later version.                                        **
+ **                                                                         **
+ **  This program is distributed  in the hope  that it will be useful, but  **
+ **  WITHOUT    ANY WARRANTY;   without  even  the    implied warranty  of  **
+ **  MERCHANTABILITY or  FITNESS FOR  A PARTICULAR  PURPOSE.   See the GNU  **
+ **  General Public License for more details.                               **
+ **                                                                         **
+ **  You  should have received a copy   of the GNU  General Public License  **
+ **  along with    this program;  if   not, write  to  the   Free Software  **
+ **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.              **
+\*****************************************************************************/
+
+
+/*
+ * $Id: vt102.c,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $
+ *
+ * $Log: vt102.c,v $
+ * Revision 0.1  1999/05/27 19:43:16  alexios
+ * Initial revision, as adapted from Duh Draw.
+ *
+ *
+ */
+
+
+#ifndef RCS_VER 
+#define RCS_VER "$Id: vt102.c,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $"
+#endif
+
+
+#include "tq.h"
+
+
+enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey,
+       EShash, ESsetG0, ESsetG1, ESpercent, ESignore, ESnonstd,
+       ESpalette };
+
+static int ansi2cga[]={0,4,2,6,1,5,3,7}; /* ANSI RGB -> CGA BGR */
+
+struct interpreter_state {	/* state of the VT-102 virtual machine */
+  int vc_state;			
+  int tab_stop[5];
+  int need_wrap;
+  int pos;			/* Position in the buffer */
+  int npar;
+  int par[8];
+  int ques;
+  int x;
+  int y;
+  int blink;
+  int intensity;
+  int underline;
+  int reverse;
+  int color;
+  int back;
+  int fore;
+  int attr;
+  int saved_x;
+  int saved_y;
+  int s_intensity;
+  int s_underline;
+  int s_blink;
+  int s_reverse;
+  int s_color;
+};
+
+static struct interpreter_state is;
+
+
+/* Most of the code here seems to be from the Linux kernel */
+
+
+static void default_attr()
+{
+  is.intensity=0;
+  is.underline=0;
+  is.reverse=0;
+  is.blink=0;
+  is.color=DEFAULT_ATTR;	/* def_color; */
+  is.fore=7;
+  is.back=0;
+}
+
+static void gotoxy(int new_x, int new_y)
+{
+  if(new_x<0)is.x=0;
+  else if (new_x>=originalwidth) is.x=originalwidth-1;
+  else is.x=new_x;
+  
+  if(new_y<0) is.y=0;
+  else if (new_y>=MAXLINES) is.y=MAXLINES-1;
+  else is.y=new_y;
+
+  is.pos=(is.y*originalwidth)+is.x;
+  is.need_wrap=0;
+}
+
+static void update_attr()
+{
+  is.attr=is.color;
+  if(is.blink) is.attr^=0x80;
+  if(is.intensity==2) is.attr^=0x08;
+}
+
+static void cr()
+{
+  is.need_wrap=0;
+  is.x=0;
+  is.pos=(is.y*originalwidth)+is.x;
+}
+
+
+static void lf()
+{
+  if(is.y<MAXLINES){ 
+    is.y++; 
+    is.pos=(is.y*originalwidth)+is.x;
+  } 
+  is.need_wrap=0;
+}
+
+static void ri()
+{
+  /* Just a placeholder, it seems */
+}
+
+static void save_cur()
+{
+  is.saved_x=is.x;
+  is.saved_y=is.y;
+  is.s_intensity=is.intensity;
+  is.s_underline=is.underline;
+  is.s_blink=is.blink;
+  is.s_reverse=is.reverse;
+  is.s_color=is.color;
+}
+
+static void restore_cur()
+{
+  gotoxy(is.saved_x,is.saved_y);
+  is.intensity=is.s_intensity;
+  is.underline=is.s_underline;
+  is.blink=is.s_blink;
+  is.reverse=is.s_reverse;
+  is.color=is.s_color;
+  update_attr(); 
+  is.need_wrap=0;
+}
+
+static void csi_m()
+{
+  int i;
+  
+  for (i=0;i<=is.npar;i++){
+    switch (is.par[i]) {
+    case 0:	/* all attributes off */
+      default_attr();
+      break;
+    case 1:
+      is.intensity=2;
+      break;
+    case 2:
+      is.intensity=0;
+      break;
+    case 4:
+      is.underline=1;
+      break;
+    case 5:
+      is.blink=1;
+      break;
+    case 7:
+      is.reverse=1;
+      break;
+    case 21:
+    case 22:
+      is.intensity=1;
+      break;
+    case 24:
+      is.underline=0;
+      break;
+    case 25:
+      is.blink=0;
+      break;
+    case 27:
+      is.reverse=0;
+      break;
+    case 38: /* ANSI X3.64-1979 (SCO-ish?)
+	      * Enables underscore, white foreground
+	      * with white underscore (Linux - use
+	      * default foreground).
+	      */
+      is.color=(DEFAULT_ATTR&0x0f)|is.back;
+      is.underline=1;
+      break;
+    case 39: /* ANSI X3.64-1979 (SCO-ish?)
+	      * Disable underline option.
+	      * Reset colour to default? It did this
+	      * before...
+	      */
+      is.color=(DEFAULT_ATTR&0x0f)|is.back;
+      is.underline=0;
+      break;
+    case 49:
+      is.color=(DEFAULT_ATTR&0xf0)|is.fore;
+      break;
+    default:
+      if (is.par[i] >= 30 && is.par[i] <= 37) {
+	is.fore=ansi2cga[(is.par[i]-30)&0x7];
+	is.color=(is.back<<4)|is.fore;
+      } else if (is.par[i]>=40 && is.par[i]<=47){
+	is.back=ansi2cga[(is.par[i]-40)&0x7];
+	is.color=(is.back<<4)|is.fore;
+      }
+      break;
+    }
+  }
+  update_attr(); 
+}
+
+
+void load_and_interpret(int blockmode)
+{
+  FILE *fp;
+  int c;
+  int x1=0,y1=0,x2=originalwidth-1,y2=MAXLINES-1;
+
+  is.tab_stop[0]=0x01010100;
+  is.tab_stop[1]=0x01010101;
+  is.tab_stop[2]=0x01010101;
+  is.tab_stop[3]=0x01010101;
+  is.tab_stop[4]=0x01010101;
+  is.need_wrap=0;
+  is.x=0;
+  is.y=0;
+  is.pos=0;
+
+  /* Calculate drawing extents */
+
+  if(!blockmode){
+    x1=y1=0;
+    x2=originalwidth-1;
+    y2=MAXLINES-1;
+  } else {
+    x1=bx1;
+    x2=bx2;
+    y1=by1;
+    y2=by2;
+  }
+
+
+  bzero(&is,sizeof(is));
+
+  if((fp=fopen(filename,"r"))!=NULL){
+    
+    /* read in the file,translating escape codes to color codes,
+       storing it all in a large integer array */
+    
+    
+    while(((c=getc(fp))!=EOF) && (is.pos<buffersize)){
+      switch (c) {
+
+      case 7:
+      case 8:
+	continue;
+
+      case 9:
+	is.pos-=is.x;
+	while(x<(originalwidth-1)){
+	  x++;
+	  if(is.tab_stop[x>>5] & (1<<(x&31))) break;
+	}
+	is.pos+=x;
+	continue;
+
+      case 10:
+      case 11:
+      case 12:
+	cr();
+	lf();
+	continue;
+
+      case 13:
+      case 14:
+      case 15:
+	continue;
+
+      case 24:
+      case 26:
+	is.vc_state=ESnormal;
+	continue;
+
+      case 27:
+	is.vc_state=ESesc;
+	continue;
+
+      default:
+	if((is.vc_state==ESnormal)) {
+	  int x,y;
+	  
+	  if(is.need_wrap){
+	    cr();
+	    lf();
+	  }
+
+	  x=is.pos%originalwidth;
+	  y=is.pos/originalwidth;
+
+	  if(x1<=x && x<=x2 && y1<=y && y<=y2){
+	    editbuffer[is.pos].attrs=((is.attr<<8)+c);
+	    /*numcolumns=max(numcolumns,(is.pos%originalwidth)+1);
+	      numlines=max(numlines,(is.pos/originalwidth)+1);*/
+	  }
+	  
+	  if (is.x==(originalwidth-1)) is.need_wrap=1;
+	  else {
+	    is.x++;
+	    is.pos++;
+	  }
+	  continue;
+	}
+      }
+	
+      switch(is.vc_state) {
+      case ESesc:
+	is.vc_state=ESnormal;
+	switch (c) {
+	case '[':
+	  is.vc_state=ESsquare;
+	  continue;
+	case ']':
+	  is.vc_state=ESnonstd;
+	  continue;
+	case '%':
+	  is.vc_state=ESpercent;
+	  continue;
+	case 'E':
+	  cr();
+	  lf();
+	  continue;
+	case 'M':
+	  ri();
+	  continue;
+	case 'D':
+	  lf();
+	  continue;
+	case 'H':
+	case 'Z':
+	  continue;
+	case '7':
+	  save_cur();
+	  continue;
+	case '8':
+	  restore_cur();
+	  continue;
+	case '(':
+	  is.vc_state=ESsetG0;
+	  continue;
+	case ')':
+	  is.vc_state=ESsetG1;
+	  continue;
+	case '#':
+	  is.vc_state=EShash;
+	  continue;
+	case 'c':
+	case '>':  /* Numeric keypad */
+	case '=':  /* Appl. keypad */
+	  continue;
+	}
+	continue;
+
+      case ESnonstd:
+	if (c=='P') {   /* palette escape sequence */
+	  for (is.npar=0;is.npar<7;is.npar++) is.par[is.npar]=0;
+	  is.npar=0 ;
+	  is.vc_state=ESpalette;
+	  continue;
+	} else if (c=='R') {   /* reset palette */
+	  is.vc_state=ESnormal;
+	} else is.vc_state = ESnormal;
+	continue;
+
+      case ESpalette:
+	if ((c>='0'&&c<='9')||(c>='A'&&c<='F')||(c>='a'&&c<='f')) {
+	  is.par[is.npar++]=(c>'9'?(c&0xDF)-'A'+10:c-'0');
+	} else is.vc_state = ESnormal;
+	continue;
+
+      case ESsquare:
+	for(is.npar=0;is.npar<7;is.npar++)is.par[is.npar] = 0;
+	is.npar=0;
+	is.vc_state=ESgetpars;
+	if(c=='['){ /* Function key */
+	  is.vc_state=ESfunckey;
+	  continue;
+	}
+	is.ques=(c=='?');
+	if(is.ques)continue;
+
+      case ESgetpars:
+	if (c==';' && is.npar< 6) {
+	  is.npar++;
+	  continue;
+	} else if (c>='0' && c<='9') {
+	  is.par[is.npar] *= 10;
+	  is.par[is.npar] += c-'0';
+	  continue;
+	} else is.vc_state=ESgotpars;
+	
+      case ESgotpars:
+	is.vc_state = ESnormal;
+	switch(c) {
+	case 'h':
+	case 'l':
+	case 'n':
+	  continue;
+	}
+	
+	if (is.ques) {
+	  is.ques = 0;
+	  continue;
+	}
+	
+	switch(c) {
+
+	case 'G':
+	case '`':
+	  if (is.par[0]) is.par[0]--;
+	  gotoxy(is.par[0],is.y);
+	  continue;
+
+	case 'A':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(is.x,is.y-is.par[0]);
+	  continue;
+	
+	case 'B':
+	case 'e':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(is.x,is.y+is.par[0]);
+	  continue;
+	  
+	case 'C':
+	case 'a':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(is.x+is.par[0],is.y);
+	  continue;
+
+	case 'D':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(is.x-is.par[0],is.y);
+	  continue;
+
+	case 'E':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(0,is.y+is.par[0]);
+	  continue;
+
+	case 'F':
+	  if (!is.par[0]) is.par[0]++;
+	  gotoxy(0,is.y-is.par[0]);
+	  continue;
+
+	case 'd':
+	  if (is.par[0]) is.par[0]--;
+	  gotoxy(is.x,is.par[0]);
+	  continue;
+	  
+	case 'H':
+	case 'f':
+	  if (is.par[0]) is.par[0]--;
+	  if (is.par[1]) is.par[1]--;
+	  gotoxy(is.par[1],is.par[0]);
+	  continue;
+
+	case 'J':
+	case 'K':
+	case 'L':
+	case 'M':
+	case 'P':
+	case 'c':
+	case 'g':
+	  continue;
+
+	case 'm':
+	  csi_m();
+	  continue;
+	  
+	case 'q': /* DECLL - but only 3 leds */
+	case 'r':
+	    continue;
+	    
+	case 's':
+	  save_cur();
+	  continue;
+
+	case 'u':
+	  restore_cur();
+	  continue;
+
+	case 'X':
+	case '@':
+	case ']': /* setterm functions */
+	  continue;
+	}
+	
+	continue;
+      
+      case ESpercent:
+	is.vc_state = ESnormal;
+	continue;
+	
+      case ESfunckey:
+	is.vc_state = ESnormal;
+	continue;
+
+      case EShash:
+	is.vc_state = ESnormal;
+	continue;
+
+      case ESsetG0:
+	is.vc_state = ESnormal;
+	continue;
+
+      case ESsetG1:
+	is.vc_state = ESnormal;
+	continue;
+
+      default:
+	is.vc_state = ESnormal;
+      }
+    }
+  }
+}

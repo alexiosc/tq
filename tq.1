@@ -1,0 +1,127 @@
+.\" Copyright 1999 Alexios Chouchoulas <alexios@vennea.demon.co.uk>
+.\" This program is distributed under the GPL
+.\"
+.\" Permission is granted to make and distribute verbatim copies of this
+.\" manual provided the copyright notice and this permission notice are
+.\" preserved on all copies.
+.\"
+.\" Permission is granted to copy and distribute modified versions of this
+.\" manual under the conditions for verbatim copying, provided that the
+.\" entire resulting derived work is distributed under the terms of a
+.\" permission notice identical to this one
+.\" 
+.\" Formatted or processed versions of this manual, if unaccompanied by
+.\" the source, must acknowledge the copyright and authors of this work.
+.\"
+.TH TQ 1 "July 13, 1999" "Megistos Project" ""
+.SH "NAME"
+tq \- The Quarter, full screen IBM ANSI editor for BBS graphics.
+.SH "SYNOPSIS"
+.B tq [
+.I filename
+.B ]
+
+.SH "DESCRIPTION"
+\fBtq\fR is a quick and dirty full screen editor for a subset of the ANSI X.364 standard
+``Control Sequences for Video Terminals and Peripherals''. The subset in
+question is the one adapted by Microsoft for use on the IBM PC. BBS jargon for
+such directives is simply ``ANSI'' and it (erroneously) includes text files
+augmented by the use of IBM NON-ASCII graphic characters and ANSI.SYS
+directives. This term will be used here for consistency despite its somewhat
+dubious semantics.
+
+.PP
+
+This editor allows the creation of such files by allowing image-like
+manipulations of characters, like line drawing, filling, painting with colour,
+et cetera. The editor is made to look and feel a bit like a well-known
+Shareware program running under \fBMS-DOS\fR.
+
+.SH "SYNTAX"
+.IP "filename"
+
+Specify an optional filename to load. Although \fBtq\fR can load and save other
+formats as well as ANSI, the specified file \fImust\fR be an ANSI file.
+
+.SH "USER INTERFACE"
+
+Upon startup, \fBtq\fR shows either a blank screen, or (if a file was specified
+and opened successfully), the ANSI image loaded. The bottom two lines of the
+screen are reserved and used as a status line. The first status line shows
+messages to the user; the second status line shows the following elements:
+
+.IP "Coordinates"
+These are shown in column:row format and are one-based (i.e. the upper leftmost
+corner of the screen has coordinates 1,1.
+
+.IP "Current foreground and background colour"
+The word `Color' is shown rendered in the current colour combination.
+
+.IP "Operation mode"
+This shows the editor's current mode. In normal operation, the mode reads
+`Text' in white. If Linux framebuffer support is built into the kernel, the
+software cursor changes colour to reflect the mode. The cursor colour is the
+same as the colour of the mode name here.
+
+.IP "Character set number"
+There are fifteen different `character sets', twelve of which may be selected
+by the key combination \fBMeta-key\fR, where \fBkey\fR is a top-row key from 1
+through to 0, and \fB-\fR (minus) and \fB=\fR (equal). The number of the active
+set is shown here in hexadecimal.
+
+.IP "Character set function key assignments"
+The actual function key assignments are shown next to the set number. The
+respective function keys may be used to issue the characters shown.
+
+.PP
+
+Navigation works in the intuitive way. The arrow keys move the cursor
+around. The \fBHome\fR key moves to the beginning of the line. If the cursor
+already \fIis\fR at the beginning of a line, it moves to the top line. Two
+presses of \fBHome\fR move the cursor to the top left corner of the screen. The
+\fBEnd\fR key works similarly, moving to the end of a line, then to the bottom
+of the drawing area. The \fBPage Up\fR and \fBPage Down\fR keys move the cursor
+up and down by approximately half a page length. The combinations
+\fBControl-U\fR and \fBControl-V\fR (as used in \fBjoe\fR, among other things),
+also move up and down by half a page length.
+
+\fBMeta-H\fR (or \fBAlt-H\fR for \fBDOS\fR people), summons a help page listing
+all of \fBtq\fR's commands.
+
+\fBControl-C\fR is the \fIcancel\fR command. It aborts anything you might be
+doing and returns you to the main program. Use it whenever you need to stop a
+process. It has the same semantics as \fBEscape\fR, which doesn't work nicely
+enough due to \fBCurses\fR attaching a timeout to it.
+
+
+.SH "FILE FORMATS"
+
+Insert binary save format here.
+
+.SH "BUGS"
+
+\fBtq\fR expects to start up with a nicely cooked terminal already in a mode
+that'll display all IBM characters. If this isn't the case and the intro screen
+looks decidedly evil, try ``\fBecho -ne "\\033(K"\fR''.
+
+\fBtq\fR works far better on the Linux console and similar devices or terminal
+emulators.
+
+\fBncurses\fR was made to cope with insane terminals, but some colour
+combinations are beyond even it, especially those involving ``dark grey'',
+which is really ``bright black'' (bletch). Handling that in \fBtq\fR required
+too many hacks and kludges for any programmer's taste. Black on
+dark grey shows as light grey on dark grey. The saved files work all right,
+though.
+
+Depending on the type of your console, the upper eight background colours
+may show as bright backgrounds or dark backgrounds with blinking
+foregrounds. This is due to the way IBM organised the display attributes in
+memory. CGA/PGA/EGA/VGA/SVGA based systems show blinking characters by
+default, but this can be changed on all of these display adapters. A Linux
+console running on framebuffer device (graphical console) can't blink. Your
+mileage may vary. Most BBSs assume the blink behaviour, though, even on
+modern telnet-type connections where the emulated terminal usually lacks such
+features.
+
+Would \fIyou\fR have done any better within a week with glandular fever?

@@ -1,0 +1,307 @@
+head	0.1;
+access;
+symbols;
+locks
+	bbs:0.1;
+comment	@ * @;
+
+
+0.1
+date	99.05.27.19.43.16;	author alexios;	state Exp;
+branches;
+next	;
+
+
+desc
+@Displaying the drawing etc.
+@
+
+
+0.1
+log
+@Initial revision, as adapted from Duh Draw.
+@
+text
+@#include <unistd.h>
+#include <string.h>
+#include <ctype.h>
+#include "tq.h"
+
+
+void cgoto()
+{
+  move(y-starty,x);
+}
+
+
+void ccolor()
+{
+  cgaattr(attr);
+}
+
+
+/* If a software cursor is supported (on some Linux consoles), update
+   the shape and colour of the cursor to show state */
+
+static int cursor_init=0;
+static int soft_cursor=0;
+
+static void
+has_software_cursor()
+{
+#ifdef linux
+  char s[256];
+  s[0]=0;
+  if(ttyname(fileno(stdin))!=NULL)strcpy(s,ttyname(fileno(stdin)));
+  else return;
+  if(strstr(s,"/dev/tty")!=s)return;
+  if(!isdigit(s[8]))return;
+
+  /* Right, our tty device matches regexp /^\/dev\/tty[0-9]/ */
+
+  soft_cursor=1;
+  sprintf(s,"\e[[?24;0;0c");
+
+  /* Linux will still grok (and ignore) cursor shape directives on a
+     non-capable console, so go for it. */
+
+#endif
+}
+
+
+static void
+ccursor()
+{
+  char s[256];
+  int  mode=24,xor=0,set=0;
+
+  if(!cursor_init){
+    has_software_cursor();
+    cursor_init=1;
+  }
+  if(!soft_cursor)return;
+
+  if(linedraw){
+    mode=17;
+    xor=24;
+    set=0;
+  } else if(block>0 && block<2) {
+    mode=17;
+    xor=40;
+    set=0;
+  } else if(block==2){
+    mode=17;
+    xor=0;
+    set=0;
+  } else if(block==3){
+    mode=17;
+    xor=56;
+    set=0;
+  } else if(attrpaint){
+    mode=17;
+    xor=88;
+    set=0;
+  } else if(insert){
+    mode=20;
+  }
+
+  sprintf(s,"\e[?%d;%d;%dc",mode,xor,set);
+  write(fileno(stdout),s,strlen(s));
+}
+
+
+void cursor_off()
+{
+  if(!cursor_init){
+    has_software_cursor();
+    cursor_init=1;
+  }
+  if(soft_cursor){
+    char s[256];
+    strcpy(s,"\e[?17;0;0c");
+    write(fileno(stdout),s,strlen(s));
+  }
+}
+
+
+void cursor_on()
+{
+  ccursor();
+}
+
+
+void dumpline(int line)
+{
+  int ofs,co,maxx;
+
+  /* Is line within screen limits? */
+  if((line-starty)<0 || (line-starty)>=(rows-2))return;
+
+  maxx=min(cols,originalwidth);
+  ofs=line*originalwidth;
+  move(line-starty,0);
+
+  for(co=0;co<maxx;co++,ofs++){
+    int c=editbuffer[ofs].attrs&0xff, a=editbuffer[ofs].attrs>>8;
+    if((block==2) &&
+       (line>=min(by1,y)) && (line<=max(by1,y)) &&
+       (co>=min(bx1,x)) && (co<=max(bx1,x)))
+      a^=0x7f;
+    cgaattr(a);
+    /*attron(A_ALTCHARSET);*/
+
+    /* Black-on-black shows as white-on-black under Curses */
+    
+    if(a&0x7f)addch(c&0x80?c:c|A_ALTCHARSET);
+    else addch(32);
+  }
+}
+
+
+void
+dumpblock()
+{
+  int i,j,pos;
+  int maxx=min(cols,originalwidth);
+
+  /* Adjust block boundaries to follow cursor */
+
+  bx2+=x-bx1;
+  by2+=y-by1;
+  bx1=x;
+  by1=y;
+
+  for(pos=0,i=by1;i<=by2;i++){
+    if(i>=starty && i<=starty+rows-3){
+      for(j=bx1;j<=bx2;j++,pos++){
+	if(j<maxx){
+	  int c=blockbuffer[pos].attrs&0xff;
+	  move(i-starty,j);
+	  cgaattr(blockbuffer[pos].attrs>>8);
+	  switch(dragtype){
+	  case 0:		/* Front, opaque */
+	    addch(c&0x80?c:c|A_ALTCHARSET);
+	    break;
+	  case 1:		/* Front, transparent */
+	    if((editbuffer[i*originalwidth+j].attrs&0xff)==32)
+	      addch(c&0x80?c:c|A_ALTCHARSET);
+	    break;
+	  case 2:		/* Back */
+	    if(c!=32)addch(c&0x80?c:c|A_ALTCHARSET);
+	    break;
+	  }
+	}
+      }
+    } else {
+      pos+=bx2-bx1+1;
+    }
+  }
+}
+
+
+void
+dumpscreen()
+{
+  int i;
+  for(i=0;i<rows-2;i++)dumpline(i+starty);
+  if(block==3)dumpblock();
+}
+
+
+void status()
+{
+  int i;
+  char *cp;
+
+  move(rows-2,0);
+  attroff(-1);
+  clrtoeol();
+
+  if(!strlen(statusline)){
+    if(!cancel){
+      strcpy(statusline,
+	     "Press [Alt-H], [Meta-H] or [Esc-H] for help. [Ctrl-C] cancels operations.");
+    } else {
+      strcpy(statusline,"\014Cancel.\007");
+      beep();
+    }
+  }
+  for(cp=statusline;*cp;cp++){
+    switch(*cp){
+    case '{': cgaattr(0xa); break;
+    case '[': cgaattr(0xe); break;
+    case ']': case '}': cgaattr(0x7); break;
+    default:
+      if((*cp>0)&&(*cp<16))cgaattr(*cp);
+      else addch(*cp);
+    }
+  }
+
+  cgaattr(0x0c);		/* Bright red on black */
+  mvprintw(rows-1,0,"%03d:%04d ",x+1,y+1);
+  clrtoeol();
+  cgaattr(0x0e);		/* Bright yellow on black */
+
+  ccolor();
+  printw("Color");
+
+  if(linedraw){
+    cgaattr(0x09);
+    printw(" Line  ");
+  } else if(block>0 && block<3) {
+    cgaattr(0x0a);
+    printw(" Block ");
+  } else if(block==3){
+    cgaattr(0x0b);
+    if(dragtype==0)printw(" Front ");
+    else if(dragtype==1)printw(" Back  ");
+    else if(dragtype==2)printw(" Trans ");
+  } else if(attrpaint){
+    cgaattr(0x0d);
+    printw(" Attr  ");
+  } else {
+    cgaattr(0x0f);
+    printw(" Text  ");
+  }
+  
+  cgaattr(0x0f);
+  if(insert){
+    printw(" In ");
+  } else {
+    printw("    ");
+  }
+
+  printw("Set:%x ",chrset+1);
+  cgaattr(0x1b);		/* Bright cyan on blue */
+  addch(' ');
+  for(i=0;i<10;i++){
+    int c=graphchars[chrset][i];
+    cgaattr(0x1b);		/* Bright cyan on blue */
+    printw("%d=",i+1);
+    cgaattr(0x1e);		/* Yellow on blue */
+    addch(c&0x80?c:A_ALTCHARSET|c);
+    addch(' ');
+  }
+
+  ccolor();
+  cgoto();
+  ccursor();
+}
+
+
+void show_bin(unsigned short int *image)
+{
+  int dx=(COLS-80)/2;
+  int dy=(LINES-25)/2;
+  int x,y;
+  clear();
+  for(y=0;y<25;y++){
+    move(dy+y,dx);
+    for(x=0;x<80;x++){
+      int c=image[y*80+x]&0xff;
+      cgaattr(image[y*80+x]>>8);
+      addch(c&0x80?c:A_ALTCHARSET|c);
+    }
+  }
+}
+@

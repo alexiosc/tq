@@ -1,0 +1,216 @@
+head	0.2;
+access;
+symbols;
+locks
+	bbs:0.2;
+comment	@ * @;
+
+
+0.2
+date	99.05.27.19.56.19;	author alexios;	state Exp;
+branches;
+next	0.1;
+
+0.1
+date	99.05.27.19.43.16;	author alexios;	state Exp;
+branches;
+next	;
+
+
+desc
+@Initialise the editor.
+@
+
+
+0.2
+log
+@Added code to display the version number on the welcome
+screen.
+@
+text
+@/*****************************************************************************\
+ **                                                                         **
+ **  FILE:     init.h                                                       **
+ **  AUTHORS:  Alexios (originally: Ben Fowler)                             **
+ **  LEGALESE:                                                              **
+ **                                                                         **
+ **  This program is free software; you  can redistribute it and/or modify  **
+ **  it under the terms of the GNU  General Public License as published by  **
+ **  the Free Software Foundation; either version 2 of the License, or (at  **
+ **  your option) any later version.                                        **
+ **                                                                         **
+ **  This program is distributed  in the hope  that it will be useful, but  **
+ **  WITHOUT    ANY WARRANTY;   without  even  the    implied warranty  of  **
+ **  MERCHANTABILITY or  FITNESS FOR  A PARTICULAR  PURPOSE.   See the GNU  **
+ **  General Public License for more details.                               **
+ **                                                                         **
+ **  You  should have received a copy   of the GNU  General Public License  **
+ **  along with    this program;  if   not, write  to  the   Free Software  **
+ **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.              **
+\*****************************************************************************/
+
+
+/*
+ * $Id: init.c,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $
+ *
+ * $Log: init.c,v $
+ * Revision 0.1  1999/05/27 19:43:16  alexios
+ * Initial revision, as adapted from Duh Draw.
+ *
+ *
+ */
+
+
+#ifndef RCS_VER 
+#define RCS_VER "$Id: init.c,v 0.1 1999/05/27 19:43:16 alexios Exp bbs $"
+#endif
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <termios.h>
+#include <signal.h>
+#include <sys/kd.h>
+#include <sys/ioctl.h>
+
+#include "tq.h"
+#include "image_intro.h"
+
+
+
+static struct termios oldttyflags;
+static int            oldmetaflag;
+
+
+void
+storetty()
+{
+  tcgetattr(0,&oldttyflags);
+  ioctl(0,KDGKBMETA,&oldmetaflag);
+  ioctl(0,KDSKBMETA,K_ESCPREFIX);
+}
+
+
+
+void
+restoretty()
+{
+  ioctl(0,KDSKBMETA,oldmetaflag);
+  (void) tcsetattr(0,TCSANOW,&oldttyflags);
+}
+
+
+
+void
+graceful_exit()
+{
+  restoretty();
+}
+
+
+
+static void
+setgeometry()
+{
+  originalwidth=COLS;
+  statusline=(char*)malloc(cols+1);
+  buffersize=MAXLINES*cols;
+  editbuffer=(cell_t*)malloc(sizeof(cell_t)*buffersize);
+  x=y=starty=0;
+}
+
+
+static void
+intro()
+{
+  int c;
+  show_bin(screen_intro);
+  cgaattr(0xb);
+  mvprintw((LINES-25)/2+24,
+	   (COLS-80)/2+11,
+	   "%d.%02d",
+	   MAJOR_VERSION,MINOR_VERSION);
+  move(LINES-1,COLS-1);
+  c=mygetchar();
+}
+
+
+
+
+void init(int argc, char **argv)
+{
+  storetty();
+  atexit(graceful_exit);
+  initscr();
+
+  setgeometry();
+  
+  noecho();			/* shuttoff tty echoing */
+  nonl();			/* don't wait for carriage return */
+  cbreak();
+  /*raw();*/
+  keypad(stdscr,TRUE);		/* Enable processing of function keys */
+  scrollok(stdscr,FALSE);
+  leaveok(stdscr,FALSE);
+
+  meta(stdscr,TRUE);
+
+  if(has_colors()){
+    int i,j;
+    int cols[8]={COLOR_BLACK,COLOR_BLUE,COLOR_GREEN,COLOR_CYAN,
+		 COLOR_RED,COLOR_MAGENTA,COLOR_YELLOW,COLOR_WHITE};
+  
+    start_color();
+    for(i=0;i<8;i++)for(j=0;j<8;j++)init_pair(i+j*8,cols[i],cols[j]);
+  }
+  
+#if 0
+  _sort_func=mysort;
+#endif
+  // printf("\e(U"); /* set linux virtual console to IBM_PC graphics set */
+  clr(); /* clear buffer and screen */
+
+  strcpy(filename,"");
+  if(argc>1){
+    if(strcmp(argv[1],"-help")==0) dohelp();
+    else {
+      strcpy(filename,argv[1]);
+      readfile();
+    }
+  }
+  
+  intro();
+
+  /*  printf("%s",screendata);*/
+  /*wrefresh(stdscr);*/
+  /*c=mygetchar();*/
+
+  signal(SIGINT,int_handler);
+  signal(SIGQUIT,int_handler);
+  signal(SIGABRT,int_handler);
+  signal(SIGSTOP,int_handler);
+  signal(SIGUSR1,int_handler);
+  signal(SIGUSR2,int_handler);
+  fixvars();
+  dumpscreen();
+  status();
+}
+@
+
+
+0.1
+log
+@Initial revision, as adapted from Duh Draw.
+@
+text
+@d24 5
+a28 1
+ * $Id$
+a29 1
+ * $Log$
+d35 1
+a35 1
+#define RCS_VER "$Id$"
+d99 6
+@
